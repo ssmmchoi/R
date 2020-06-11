@@ -1,0 +1,98 @@
+#############################################
+# 단계3 - 감성 분석(단어의 긍정/부정 분석) 
+#  - 시각화 : 파랑/빨강 -> 불만고객 시각화
+#############################################
+
+# 1. 데이터 가져오기() 
+setwd("C:/ITWILL/Work/2_Rwork/Part-II")
+
+data<-read.csv("reviews.csv") 
+head(data,2)
+
+
+# 2. 단어 사전에 단어추가
+
+# 긍정어/부정어 영어 사전 가져오기
+posDic <- readLines("posDic.txt")
+negDic <- readLines("negDic.txt")
+length(posDic) # 2006
+length(negDic) # 4783
+
+
+# 긍정어/부정어 단어 추가 
+posDic.final <-c(posDic, 'victor')
+negDic.final <-c(negDic, 'vanquished')
+
+
+# 3. 감성 분석 함수 정의 - sentimental
+
+# (1) 문자열 처리를 위한 패키지 로딩 
+install.packages("plyr")
+library(plyr) # laply()함수 제공
+library(stringr) # str_split()함수 제공
+
+# (2) 감성분석을 위한 함수 정의
+sentimental = function(sentences, posDic, negDic){
+  
+  scores = laply(sentences, function(sentence, posDic, negDic) {
+    
+    # 문장 전처리 gsub('패턴')
+    sentence = gsub('[[:punct:]]', '', sentence) #문장부호 제거
+    sentence = gsub('[[:cntrl:]]', '', sentence) #특수문자 제거
+    sentence = gsub('\\d+', '', sentence) # 숫자 제거
+    sentence = tolower(sentence) # 모두 소문자로 변경(단어가 모두 소문자 임)
+    
+    # 공백을 기준으로 문장을 -> 단어로(엉어니까)
+    word.list = str_split(sentence, '\\s+') # 공백 기준으로 단어 생성 -> \\s+ : 공백 정규식, +(1개 이상) 
+    words = unlist(word.list) # unlist() : list를 vector 객체로 구조변경
+    
+    # 단어와 사전 매치(사전에 있는지 없는지)
+    pos.matches = match(words, posDic) # words의 단어를 posDic에서 matching
+    neg.matches = match(words, negDic)
+    
+    # 매칭된 단어 추출
+    pos.matches = !is.na(pos.matches) # NA 제거, 위치(숫자)만 추출
+    neg.matches = !is.na(neg.matches)
+    
+    score = sum(pos.matches) - sum(neg.matches) # 긍정 - 부정    
+    return(score)    #  양이면 긍정, 음이면 부정
+  }, posDic, negDic)                       # inner function
+  
+  scores.df = data.frame(score=scores, text=sentences)
+  return(scores.df)
+}                                          # outer function
+
+# 4. 감성 분석 : 두번째 변수(review) 전체 레코드 대상 감성분석
+result<-sentimental(data[,2], posDic.final, negDic.final)
+result
+names(result) # "score" "text" 
+dim(result) # 100   2
+result$text
+result$score # 100 줄 단위로 긍정어/부정어 사전을 적용한 점수 합계
+
+# score값을 대상으로 color 칼럼 추가
+result$color[result$score >=1] <- "blue"
+result$color[result$score ==0] <- "green"
+result$color[result$score < 0] <- "red"
+
+# 감성분석 결과 차트보기
+plot(result$score, col=result$color) # 산포도 색생 적용
+barplot(result$score, col=result$color, main ="감성분석 결과화면") # 막대차트
+
+
+# 5. 단어의 긍정/부정 분석 
+
+# (1) 감성분석 빈도수 
+table(result$color)
+
+# (2) score 칼럼 리코딩 
+result$remark[result$score >=1] <- "긍정"
+result$remark[result$score ==0] <- "중립"
+result$remark[result$score < 0] <- "부정"
+
+sentiment_result<- table(result$remark)
+sentiment_result
+
+# (3) 제목, 색상, 원크기
+pie(sentiment_result, main="감성분석 결과", 
+    col=c("blue","red","green"), radius=0.8) # ->  1.2
